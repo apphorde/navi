@@ -9,9 +9,9 @@ export default function () {
   async function showPrompt() { try { prompt.value = (await request('/api/ai/prompt')).prompt; promptOpen.value = true; } catch (error) { saveStatus.value = error.message; } }
   async function savePrompt(event) { try { prompt.value = (await request('/api/ai/prompt', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: event.detail || event }) })).prompt; promptOpen.value = false; } catch (error) { saveStatus.value = error.message; } }
   onInit(async () => { try { user.value = await request('/api/profile'); aiEnabled.value = (await request('/api/ai/config')).enabled; await loadTree(); } catch (error) { saveStatus.value = error.message; } });
-  function openNav() { navOpen.value = true; clearTimeout(navCloseTimer); if (!navPinned.value) navCloseTimer = setTimeout(() => (navOpen.value = false), 5000); }
+  function openNav() { navOpen.value = true; clearTimeout(navCloseTimer); if (!navPinned.value) navCloseTimer = setTimeout(() => (navOpen.value = false), 2000); }
   function closeNav() { clearTimeout(navCloseTimer); navOpen.value = false; }
-  function openInfo() { infoPinned.value = false; clearTimeout(infoCloseTimer); infoCloseTimer = setTimeout(() => (infoPinned.value = true), 5000); }
+  function openInfo() { infoPinned.value = false; clearTimeout(infoCloseTimer); infoCloseTimer = setTimeout(() => (infoPinned.value = true), 2000); }
   function toggleNavPin() { navPinned.value = !navPinned.value; if (!navPinned.value) openNav(); else closeNav(); }
   function toggleInfoPin() { infoPinned.value = !infoPinned.value; if (infoPinned.value) clearTimeout(infoCloseTimer); }
   return { items, selected, mode, navOpen, navPinned, infoPinned, user, saveStatus, aiEnabled, promptOpen, prompt, loadTree, select, save, showPrompt, savePrompt, setMode: (value) => (mode.value = value), openNav, closeNav, openInfo, toggleNavPin, toggleInfoPin, closePrompt: () => (promptOpen.value = false), newFile: async () => { const name = window.prompt('New file name'); if (!name) return; try { await request('/api/file', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: name, kind: 'file' }) }); await loadTree(); } catch (error) { saveStatus.value = error.message; } } };
