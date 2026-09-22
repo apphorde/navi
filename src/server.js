@@ -6,6 +6,7 @@ import { createFilesystem, FsError } from './filesystem.js';
 import { openDatabase } from './db.js';
 import { createSessions, parseCookies } from './session.js';
 import { createAi, streamWords } from './ai.js';
+import { requestOrigin } from './origin.js';
 
 const port = Number(process.env.PORT || 3000);
 const dataRoot = process.env.DATA_ROOT || '/home/app/data';
@@ -33,11 +34,7 @@ const sessions = createSessions(process.env.SESSION_SECRET || 'development-only-
 const publicRoot = path.resolve(new URL('../public/', import.meta.url).pathname);
 
 function origin(request) {
-  const trusted = process.env.TRUST_PROXY === 'true';
-  const proto = trusted ? (request.headers['x-forwarded-proto'] || 'http').split(',')[0].trim() : 'http';
-  const host = trusted ? (request.headers['x-forwarded-host'] || request.headers.host) : request.headers.host;
-  if (!host || !['http', 'https'].includes(proto)) throw new Error('Invalid request origin');
-  return `${proto}://${host}`;
+  return requestOrigin(request);
 }
 function send(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers }); response.end(body === undefined ? '' : JSON.stringify(body)); }
 function errorResponse(response, error) { const status = error instanceof FsError ? error.status : error.status || 500; send(response, status, { error: error.code || 'INTERNAL_ERROR', message: status === 500 ? 'An internal error occurred' : error.message }); }
