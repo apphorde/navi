@@ -1,5 +1,5 @@
 <template component="navi-app">
-  <main class="app" class-nav-unpinned="!navPinned" class-info-unpinned-layout="!infoPinned">
+  <main class="app" class-no-selection="!selected" class-nav-unpinned="!navPinned" class-info-unpinned-layout="!infoPinned">
     <file-nav bind-items="items" bind-open="navOpen" bind-pinned="navPinned" on-pin="toggleNavPin()" on-select="select($event)" on-refresh="loadTree()" on-new-file="newFile()" on-close="closeNav()" bind-user="user"></file-nav>
     <section class="panel workspace">
       <header class="bar"><button class="icon mobile-menu" on-click="openNav()"><lucide-icon icon="menu" size="18" icon-classes="icon-svg"></lucide-icon></button><div class="crumb"><span>data</span><span>/</span><strong>{{ selected?.path || 'Select a file' }}</strong></div><div><button class="icon" on-click="openNav()" aria-label="Open navigation"><lucide-icon icon="search" size="16" icon-classes="icon-svg"></lucide-icon></button><button class="icon mobile-menu" on-click="openInfo()" aria-label="Open details"><lucide-icon icon="info" size="16" icon-classes="icon-svg"></lucide-icon></button></div></header>
@@ -7,7 +7,7 @@
       <div class="content"><template if="selected"><file-workspace bind-file="selected" bind-mode="mode" on-save="save($event)"></file-workspace></template><template if="!selected"><div class="empty">Select a text file to begin</div></template></div>
       <footer class="status"><span class="saved-dot"></span>{{ saveStatus }}<span>UTF-8</span><span>{{ selected?.lineEnding || 'LF' }}</span><span>{{ selected?.language || '' }}</span></footer>
     </section>
-    <aside class="info-panel" class-info-unpinned="!infoPinned"><div class="panel-pin"><button class="icon" on-click="toggleInfoPin()"><lucide-icon icon="pin" size="14" icon-classes="icon-svg"></lucide-icon></button></div><template if="selected"><file-info bind-file="selected"></file-info></template><template if="aiEnabled"><ai-assistant bind-file="selected" on-settings="showPrompt()"></ai-assistant></template></aside>
+    <template if="selected"><aside class="info-panel" class-info-unpinned="!infoPinned"><div class="panel-pin"><button class="icon" on-click="toggleInfoPin()"><lucide-icon icon="pin" size="14" icon-classes="icon-svg"></lucide-icon></button></div><file-info bind-file="selected"></file-info><template if="aiEnabled"><ai-assistant bind-file="selected" on-settings="showPrompt()"></ai-assistant></template></aside></template>
     <button class="floating-launcher floating-nav-launcher" on-click="openNav()" aria-label="Open file navigation"><lucide-icon icon="menu" size="18" icon-classes="icon-svg"></lucide-icon></button><button class="floating-launcher floating-info-launcher" on-click="openInfo()" aria-label="Open file details"><lucide-icon icon="info" size="18" icon-classes="icon-svg"></lucide-icon></button>
     <template if="promptOpen"><ai-prompt-modal bind-value="prompt" on-close="closePrompt()" on-save="savePrompt($event)"></ai-prompt-modal></template>
   </main>
