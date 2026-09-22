@@ -1,0 +1,16 @@
+services:
+  navi:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      AUTH_PROVIDER: https://auth.api.apphor.de
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    volumes:
+      - ./data:/home/app/data
+      - ./navi:/home/app/navi

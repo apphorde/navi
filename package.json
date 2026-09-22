@@ -1,0 +1,19 @@
+{
+  "name": "navi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "check": "node --check src/server.js && node --check src/filesystem.js && node --check src/ai.js"
+  },
+  "dependencies": {
+    "openai": "^5.23.2"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
