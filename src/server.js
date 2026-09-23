@@ -46,7 +46,7 @@ async function api(request, response, pathname) {
   const authState = await userFor(request, response); if (!authState) return;
   const { user } = authState;
   try {
-    if (request.method === 'GET' && pathname === '/api/profile') return send(response, 200, user);
+    if (request.method === 'GET' && pathname === '/api/profile') return send(response, 200, { ...user, authProvider: issuer });
     if (request.method === 'GET' && pathname === '/api/tree') return send(response, 200, { path: new URL(request.url, 'http://navi').searchParams.get('path') || '.', entries: await filesystem.list(new URL(request.url, 'http://navi').searchParams.get('path') || '.') });
     if (request.method === 'GET' && pathname === '/api/file') return send(response, 200, await filesystem.read(new URL(request.url, 'http://navi').searchParams.get('path'), { preview: new URL(request.url, 'http://navi').searchParams.get('preview') === 'true' }));
     if (request.method === 'PUT' && pathname === '/api/file') { const input = await body(request); const result = await filesystem.write(input.path, input.content, input.version); database.audit(user, 'write', input.path, 'success'); return send(response, 200, result); }
