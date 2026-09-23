@@ -1,11 +1,11 @@
-import { defineProp, getElement } from '@li3/web';
+import { defineProp, defineEvent } from '@li3/web';
 export default function () {
   const item = defineProp('item', { default: () => ({}) });
-  const host = getElement();
+  const onTreeSelect = defineEvent('tree-select');
   function select() {
-    const value = item.value?.path ? item.value : { path: host.dataset.path, type: host.dataset.type, name: host.dataset.name, depth: Number(host.dataset.depth || 0), open: host.dataset.open === 'true', children: [] };
+    const value = item.value;
     if (!value?.path) return;
-    getElement().dispatchEvent(new CustomEvent('tree-select', { bubbles: true, composed: true, detail: value }));
+    onTreeSelect(value, { bubbles: true, composed: true });
   }
   return { item, select };
 }
