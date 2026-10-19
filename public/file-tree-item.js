@@ -4,7 +4,7 @@ export default function () {
   const onTreeSelect = defineEvent('tree-select');
   function select() {
     const value = item.value;
-    if (!value?.path) return;
+    if (!value?.path) {return;}
     onTreeSelect(value, { bubbles: true, composed: true });
   }
   return { item, select };

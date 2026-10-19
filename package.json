@@ -7,13 +7,22 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/filesystem.js && node --check src/ai.js"
+    "check": "node --check src/server.js && node --check src/filesystem.js && node --check src/ai.js",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "dependencies": {
-    "openai": "^5.23.2"
+    "openai": "^5.23.2",
+    "openid-client": "^6.8.8"
   },
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@10.15.0"
+  "packageManager": "pnpm@10.15.0",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10"
+  }
 }
