@@ -7,3 +7,4 @@
 .content{min-height:0;overflow:hidden}.editor-wrap{height:100%;min-height:0;max-height:100%;overflow:auto}.editor-wrap code-editor,.editor-wrap code-block{height:100%;max-height:100%;overflow:auto}
 .app.no-selection{grid-template-columns:242px minmax(0,1fr) 0}.no-selection .floating-info-launcher{display:none}
 .app,.app>*{min-height:0}.workspace{min-height:0;overflow:hidden}.nav-panel{height:100%;min-height:0;overflow:hidden}.tree{min-height:0;overflow-x:hidden;overflow-y:auto}.content,.assistant,.assistant-body,.info-panel{min-height:0}.editor-wrap{min-height:0;height:100%;max-height:100%;overflow:auto}.editor-wrap code-editor,.editor-wrap code-block{min-height:0!important;max-height:100%;overflow:auto}
+.tree-children{display:none}.tree-children.open{display:block}

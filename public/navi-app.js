@@ -33,7 +33,7 @@ export default function () {
       for (const path of treeRequests.keys()) {
         treeRequests.set(path, treeRequests.get(path) + 1);
       }
-      items.value = data.entries.map((item) => ({ ...item, depth: 0, open: false, children: [] }));
+      items.value = data.entries.map((item) => ({ ...item, depth: 0, open: false, loaded: false, children: [] }));
     } catch (error) {
       saveStatus.value = error.message;
     }
@@ -59,6 +59,8 @@ export default function () {
       if (current.open) {
         treeRequests.set(item.path, (treeRequests.get(item.path) || 0) + 1);
         items.value = updateTree(items.value, item.path, (entry) => ({ ...entry, open: false }));
+      } else if (current.loaded) {
+        items.value = updateTree(items.value, item.path, (entry) => ({ ...entry, open: true }));
       } else {
         const requestId = (treeRequests.get(item.path) || 0) + 1;
         treeRequests.set(item.path, requestId);
@@ -69,8 +71,14 @@ export default function () {
             return;
           }
           const depth = current.depth || 0;
-          const children = data.entries.map((child) => ({ ...child, depth: depth + 1, open: false, children: [] }));
-          items.value = updateTree(items.value, item.path, (entry) => ({ ...entry, children }));
+          const children = data.entries.map((child) => ({
+            ...child,
+            depth: depth + 1,
+            open: false,
+            loaded: false,
+            children: [],
+          }));
+          items.value = updateTree(items.value, item.path, (entry) => ({ ...entry, children, loaded: true }));
         } catch (error) {
           if (treeRequests.get(item.path) === requestId) {
             items.value = updateTree(items.value, item.path, (entry) => ({ ...entry, open: false }));
