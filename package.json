@@ -9,7 +9,8 @@
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/filesystem.js && node --check src/ai.js",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/app.css --minify"
   },
   "dependencies": {
     "openai": "^5.23.2",
@@ -21,6 +22,7 @@
   "packageManager": "pnpm@10.15.0",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/cli": "^4.3.3",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.10"
