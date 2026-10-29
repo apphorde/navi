@@ -78,6 +78,7 @@
     <template if="selected"
       ><aside
         class="relative flex min-h-0 flex-col overflow-hidden border-l border-slate-800 bg-slate-950 max-lg:hidden"
+        style-display="!infoPinned ? 'flex' : ''"
         class-lg:fixed="!infoPinned"
         class-lg:inset-y-0="!infoPinned"
         class-lg:right-0="!infoPinned"
@@ -88,7 +89,6 @@
         class-max-lg:inset-y-0="!infoPinned"
         class-max-lg:right-0="!infoPinned"
         class-max-lg:z-25="!infoPinned"
-        class-max-lg:flex="!infoPinned"
         class-max-lg:w-[min(320px,90vw)]="!infoPinned"
       >
         <div class="absolute right-2 top-[13px] z-[2]">
@@ -308,12 +308,22 @@
         <dd>{{ file.mode.toString(8) }}</dd>
       </div>
     </dl>
-    <button
-      class="inline-flex items-center gap-1.5 rounded-md border border-slate-800 bg-transparent px-2.5 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-50 cursor-pointer"
-      on-click="copy()"
-    >
-      <lucide-icon icon="copy" size="13" icon-classes="block"></lucide-icon> Copy path
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        class="inline-flex items-center gap-1.5 rounded-md border border-slate-800 bg-transparent px-2.5 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-50 cursor-pointer"
+        on-click="copy()"
+      >
+        <lucide-icon icon="copy" size="13" icon-classes="block"></lucide-icon> Copy path
+      </button>
+      <button
+        class="inline-flex items-center gap-1.5 rounded-md border border-slate-800 bg-transparent px-2.5 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-50 cursor-pointer"
+        on-click="share()"
+        aria-label="Copy shareable file URL"
+      >
+        <lucide-icon icon="share-2" size="13" icon-classes="block"></lucide-icon> Share
+      </button>
+      <span class="text-[10px] text-slate-500" role="status" aria-live="polite">{{ clipboardStatus }}</span>
+    </div>
   </section>
   <script setup src="/file-info.js"></script
 ></template>
