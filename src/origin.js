@@ -1,4 +1,30 @@
-export function requestOrigin(request, { trustProxy = false } = {}) {
+export function parsePublicOrigin(value) {
+  try {
+    const parsed = new URL(value);
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      !parsed.host ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      value.endsWith("?") ||
+      value.endsWith("#")
+    ) {
+      throw new Error("Invalid public origin");
+    }
+    return parsed.origin;
+  } catch {
+    throw new Error("Invalid public origin");
+  }
+}
+
+export function requestOrigin(request, { trustProxy = false, publicOrigin } = {}) {
+  if (publicOrigin !== undefined) {
+    return parsePublicOrigin(publicOrigin);
+  }
+
   let forwardedValues = {};
   if (trustProxy) {
     const forwarded = String(request.headers.forwarded || "").split(",")[0];

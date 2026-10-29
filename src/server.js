@@ -6,7 +6,7 @@ import { createFilesystem, FsError, MAX_EDIT_BYTES } from "./filesystem.js";
 import { openDatabase } from "./db.js";
 import { createSessions, parseCookies } from "./session.js";
 import { createAi, streamWords } from "./ai.js";
-import { requestOrigin } from "./origin.js";
+import { parsePublicOrigin, requestOrigin } from "./origin.js";
 import { readJsonBody } from "./request-body.js";
 import { isSafeMethod, mutationRequestError } from "./request-security.js";
 import * as oidc from "openid-client";
@@ -15,6 +15,7 @@ const port = Number(process.env.PORT || 3000);
 const dataRoot = process.env.DATA_ROOT || "/home/app/data";
 const naviRoot = process.env.NAVI_ROOT || "/home/app/navi";
 const trustProxy = process.env.TRUST_PROXY === "true";
+const publicOrigin = process.env.PUBLIC_ORIGIN ? parsePublicOrigin(process.env.PUBLIC_ORIGIN) : undefined;
 const authProvider = process.env.AUTH_PROVIDER;
 if (!authProvider || !process.env.OIDC_CLIENT_ID || !process.env.OIDC_CLIENT_SECRET) {
   throw new Error("AUTH_PROVIDER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET are required");
@@ -50,7 +51,7 @@ const sessions = createSessions(process.env.SESSION_SECRET || randomBytes(32).to
 const publicRoot = path.resolve(new URL("../public/", import.meta.url).pathname);
 
 function origin(request) {
-  return requestOrigin(request, { trustProxy });
+  return requestOrigin(request, { trustProxy, publicOrigin });
 }
 function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
