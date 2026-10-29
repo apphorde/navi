@@ -136,10 +136,10 @@ export default function () {
       return;
     }
     const content = editorContent(event);
-    if (content === undefined) {
+    const path = selected.value.path;
+    if (content === undefined || (content === selected.value.content && !dirtyPaths.has(path))) {
       return;
     }
-    const path = selected.value.path;
     const file = selected.value;
     if (!dirtyPaths.has(path)) {
       expectedVersions.set(path, file.version);
