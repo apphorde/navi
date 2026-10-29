@@ -1,4 +1,5 @@
 import { ref, onInit } from "@li3/web";
+import { sanitizeWorkspacePath } from "./workspace-path.js";
 
 export default function () {
   const items = ref([]);
@@ -237,6 +238,14 @@ export default function () {
       user.value = await request("/api/profile");
       aiEnabled.value = (await request("/api/ai/config")).enabled;
       await loadTree();
+      const requestedPath = new URL(window.location.href).searchParams.get("p");
+      const path = sanitizeWorkspacePath(requestedPath);
+      if (requestedPath && !path) {
+        saveStatus.value = "Invalid file path in URL";
+      } else if (path) {
+        mode.value = "editor";
+        await select({ path, type: "file" });
+      }
     } catch (error) {
       saveStatus.value = error.message;
     }
