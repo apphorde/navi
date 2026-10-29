@@ -1,4 +1,5 @@
 import { ref, onInit } from "@li3/web";
+import { editorContent } from "./editor-content.js";
 import { sanitizeWorkspacePath } from "./workspace-path.js";
 
 export default function () {
@@ -131,11 +132,10 @@ export default function () {
     return null;
   }
   async function save(event) {
-    const change = event.detail || event;
     if (!selected.value) {
       return;
     }
-    const content = typeof change === "string" ? change : change.content;
+    const content = editorContent(event);
     if (content === undefined) {
       return;
     }

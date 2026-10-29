@@ -250,7 +250,7 @@
 <template component="file-workspace"
   ><div class="h-full min-h-0 max-h-full overflow-auto">
     <template if="mode === 'editor'"
-      ><file-editor bind-file="file" on-change="$$emit('save', $event)"></file-editor></template
+      ><file-editor bind-file="file" on-change="$$emit('save', $event.detail ?? $event)"></file-editor></template
     ><template if="mode === 'preview'"><file-preview bind-file="file"></file-preview></template>
   </div>
   <script setup src="/file-workspace.js"></script
