@@ -12,7 +12,13 @@ export default function () {
   const aiEnabled = ref(false);
   const promptOpen = ref(false);
   const prompt = ref("");
-  let saveTimer;
+  const saveTimers = new Map();
+  const saveChains = new Map();
+  const saveSequences = new Map();
+  const latestContent = new Map();
+  const expectedVersions = new Map();
+  const dirtyPaths = new Set();
+  let selectedRequest = 0;
   let navCloseTimer;
   let infoCloseTimer;
   const treeRequests = new Map();
@@ -51,6 +57,7 @@ export default function () {
       saveStatus.value = "Invalid tree item";
       return;
     }
+    const requestId = ++selectedRequest;
     if (item.type === "directory") {
       const current = findTree(items.value, item.path);
       if (!current) {
@@ -90,12 +97,24 @@ export default function () {
     }
     treeRequests.set(item.path, (treeRequests.get(item.path) || 0) + 1);
     try {
-      selected.value = await request(`/api/file?path=${encodeURIComponent(item.path)}`);
+      const file = await request(`/api/file?path=${encodeURIComponent(item.path)}`);
+      if (requestId !== selectedRequest) {
+        return;
+      }
+      if (dirtyPaths.has(item.path)) {
+        file.content = latestContent.get(item.path) ?? file.content;
+        file.version = expectedVersions.get(item.path) ?? file.version;
+      } else {
+        latestContent.set(item.path, file.content);
+      }
+      selected.value = file;
       clearTimeout(navCloseTimer);
       navOpen.value = false;
-      saveStatus.value = "Saved";
+      saveStatus.value = dirtyPaths.has(item.path) ? "Unsaved" : "Saved";
     } catch (error) {
-      saveStatus.value = error.message;
+      if (requestId === selectedRequest) {
+        saveStatus.value = error.message;
+      }
     }
   }
   function findTree(list, targetPath) {
@@ -119,21 +138,77 @@ export default function () {
     if (content === undefined) {
       return;
     }
+    const path = selected.value.path;
+    const file = selected.value;
+    if (!dirtyPaths.has(path)) {
+      expectedVersions.set(path, file.version);
+    }
+    const sequence = (saveSequences.get(path) || 0) + 1;
+    saveSequences.set(path, sequence);
+    latestContent.set(path, content);
+    dirtyPaths.add(path);
     saveStatus.value = "Unsaved";
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      saveStatus.value = "Saving…";
-      try {
-        selected.value = await request("/api/file", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: selected.value.path, content, version: selected.value.version }),
-        });
-        saveStatus.value = "Saved";
-      } catch (error) {
-        saveStatus.value = error.message;
+    clearTimeout(saveTimers.get(path));
+    const timer = setTimeout(() => {
+      if (saveTimers.get(path) === timer) {
+        saveTimers.delete(path);
       }
+      const previousSave = saveChains.get(path) || Promise.resolve();
+      const saving = previousSave
+        .catch(() => {})
+        .then(async () => {
+          if (!dirtyPaths.has(path) || latestContent.get(path) !== content) {
+            if (!dirtyPaths.has(path) && selected.value?.path === path && saveSequences.get(path) === sequence) {
+              saveStatus.value = "Saved";
+            }
+            return;
+          }
+          if (selected.value?.path === path && saveSequences.get(path) === sequence) {
+            saveStatus.value = "Saving…";
+          }
+          try {
+            const current = selected.value?.path === path ? selected.value : null;
+            const result = await request("/api/file", {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                path,
+                content,
+                version: expectedVersions.get(path) ?? current?.version ?? file.version,
+              }),
+            });
+            const currentContent = latestContent.get(path);
+            if (currentContent === content) {
+              dirtyPaths.delete(path);
+              expectedVersions.delete(path);
+              latestContent.set(path, result.content);
+              if (selected.value?.path === path) {
+                selected.value = result;
+              }
+            } else {
+              expectedVersions.set(path, result.version);
+              if (selected.value?.path === path) {
+                selected.value = { ...selected.value, ...result, content: currentContent };
+              }
+            }
+            if (selected.value?.path === path && saveSequences.get(path) === sequence) {
+              saveStatus.value = dirtyPaths.has(path) ? "Unsaved" : "Saved";
+            }
+          } catch (error) {
+            if (selected.value?.path === path && saveSequences.get(path) === sequence) {
+              saveStatus.value = error.message;
+            }
+          }
+        });
+      saveChains.set(path, saving);
+      const clearChain = () => {
+        if (saveChains.get(path) === saving) {
+          saveChains.delete(path);
+        }
+      };
+      saving.then(clearChain, clearChain);
     }, 500);
+    saveTimers.set(path, timer);
   }
   async function showPrompt() {
     try {

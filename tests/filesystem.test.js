@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createFilesystem } from "../src/filesystem.js";
+import { createFilesystem, MAX_EDIT_BYTES } from "../src/filesystem.js";
 
 test("filesystem reads, writes, detects conflicts, and prevents escapes", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "navi-"));
@@ -53,6 +53,26 @@ test("filesystem preserves modes and rejects binary content", async () => {
       () => fs.rename("missing", "new"),
       (error) => error.code === "NOT_FOUND",
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("large previews stay bounded and safely truncate UTF-8", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "navi-"));
+  try {
+    const content = `${"a".repeat(MAX_EDIT_BYTES - 1)}😀z`;
+    await writeFile(path.join(root, "large.txt"), content);
+    const fs = createFilesystem(root);
+    await assert.rejects(
+      () => fs.read("large.txt"),
+      (error) => error.code === "FILE_TOO_LARGE",
+    );
+    const preview = await fs.read("large.txt", { preview: true });
+    assert.equal(preview.editable, false);
+    assert.equal(preview.version, null);
+    assert.equal(Buffer.byteLength(preview.content), MAX_EDIT_BYTES - 1);
+    assert.equal(preview.content, "a".repeat(MAX_EDIT_BYTES - 1));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -1,16 +1,20 @@
 import http from "node:http";
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { createFilesystem, FsError } from "./filesystem.js";
+import { createFilesystem, FsError, MAX_EDIT_BYTES } from "./filesystem.js";
 import { openDatabase } from "./db.js";
 import { createSessions, parseCookies } from "./session.js";
 import { createAi, streamWords } from "./ai.js";
 import { requestOrigin } from "./origin.js";
+import { readJsonBody } from "./request-body.js";
+import { isSafeMethod, mutationRequestError } from "./request-security.js";
 import * as oidc from "openid-client";
 
 const port = Number(process.env.PORT || 3000);
 const dataRoot = process.env.DATA_ROOT || "/home/app/data";
 const naviRoot = process.env.NAVI_ROOT || "/home/app/navi";
+const trustProxy = process.env.TRUST_PROXY === "true";
 const authProvider = process.env.AUTH_PROVIDER;
 if (!authProvider || !process.env.OIDC_CLIENT_ID || !process.env.OIDC_CLIENT_SECRET) {
   throw new Error("AUTH_PROVIDER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET are required");
@@ -42,11 +46,11 @@ const ai = createAi({
   model: process.env.AI_MODEL,
   database,
 });
-const sessions = createSessions(process.env.SESSION_SECRET || "development-only-change-me");
+const sessions = createSessions(process.env.SESSION_SECRET || randomBytes(32).toString("base64url"));
 const publicRoot = path.resolve(new URL("../public/", import.meta.url).pathname);
 
 function origin(request) {
-  return requestOrigin(request);
+  return requestOrigin(request, { trustProxy });
 }
 function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
@@ -59,25 +63,6 @@ function errorResponse(response, error) {
     message: status === 500 ? "An internal error occurred" : error.message,
   });
 }
-function body(request) {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    request.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > 3_000_000) {
-        reject(Object.assign(new Error("Request too large"), { status: 413 }));
-      }
-    });
-    request.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch {
-        reject(Object.assign(new Error("Invalid JSON"), { status: 400 }));
-      }
-    });
-    request.on("error", reject);
-  });
-}
 async function userFor(request, response) {
   const session = sessions.read(parseCookies(request).navi_session);
   if (!session?.accessToken) {
@@ -85,7 +70,7 @@ async function userFor(request, response) {
     return null;
   }
   try {
-    const user = await oidc.fetchUserInfo(oidcConfig, session.accessToken, oidc.skipSubjectCheck);
+    const user = await oidc.fetchUserInfo(oidcConfig, session.accessToken, session.subject);
     return { user, session };
   } catch {
     sessions.remove(session.id);
@@ -101,6 +86,18 @@ async function api(request, response, pathname) {
   const authState = await userFor(request, response);
   if (!authState) {
     return;
+  }
+  if (!isSafeMethod(request.method)) {
+    let expectedOrigin;
+    try {
+      expectedOrigin = origin(request);
+    } catch {
+      return send(response, 403, { error: "INVALID_ORIGIN", message: "Cross-origin API requests are not allowed" });
+    }
+    const error = mutationRequestError(request, expectedOrigin);
+    if (error) {
+      return send(response, error.status, { error: error.error, message: error.message });
+    }
   }
   const { user } = authState;
   try {
@@ -123,19 +120,19 @@ async function api(request, response, pathname) {
       );
     }
     if (request.method === "PUT" && pathname === "/api/file") {
-      const input = await body(request);
+      const input = await readJsonBody(request);
       const result = await filesystem.write(input.path, input.content, input.version);
       database.audit(user, "write", input.path, "success");
       return send(response, 200, result);
     }
     if (request.method === "POST" && pathname === "/api/file") {
-      const input = await body(request);
+      const input = await readJsonBody(request);
       const result = await filesystem.create(input.path, input.kind);
       database.audit(user, "create", input.path, "success");
       return send(response, 201, result);
     }
     if (request.method === "POST" && pathname === "/api/rename") {
-      const input = await body(request);
+      const input = await readJsonBody(request);
       const result = await filesystem.rename(input.path, input.destination);
       database.audit(user, "rename", input.path, "success");
       return send(response, 200, result);
@@ -153,7 +150,7 @@ async function api(request, response, pathname) {
       if (!ai) {
         return send(response, 404, { error: "AI_DISABLED" });
       }
-      const input = await body(request);
+      const input = await readJsonBody(request);
       if (typeof input.prompt !== "string" || !input.prompt.trim()) {
         return send(response, 422, { error: "INVALID_PROMPT", message: "Prompt cannot be empty" });
       }
@@ -165,9 +162,22 @@ async function api(request, response, pathname) {
       if (!ai) {
         return send(response, 404, { error: "AI_DISABLED" });
       }
-      const input = await body(request);
-      if (!input.question || !input.file?.path || typeof input.file.content !== "string") {
-        return send(response, 422, { error: "INVALID_REQUEST", message: "Question and selected file are required" });
+      const input = await readJsonBody(request);
+      if (
+        typeof input.question !== "string" ||
+        !input.question.trim() ||
+        Buffer.byteLength(input.question) > 16_000 ||
+        typeof input.file?.path !== "string" ||
+        input.file.path.length > 4096 ||
+        typeof input.file.language !== "string" ||
+        input.file.language.length > 100 ||
+        typeof input.file.content !== "string" ||
+        Buffer.byteLength(input.file.content) > MAX_EDIT_BYTES
+      ) {
+        return send(response, 422, {
+          error: "INVALID_REQUEST",
+          message: "Question or selected file is invalid or too large",
+        });
       }
       response.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -236,8 +246,12 @@ async function server(request, response) {
       if (!tokens.access_token) {
         throw new Error("Token response did not contain an access token");
       }
+      const subject = tokens.claims()?.sub;
+      if (typeof subject !== "string" || !subject) {
+        throw new Error("Token response did not contain a subject");
+      }
       const session = sessions.issue(
-        { accessToken: tokens.access_token, idToken: tokens.id_token, refreshToken: tokens.refresh_token },
+        { accessToken: tokens.access_token, idToken: tokens.id_token, refreshToken: tokens.refresh_token, subject },
         86400,
       );
       sessions.remove(login.id);

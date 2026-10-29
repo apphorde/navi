@@ -143,35 +143,69 @@ export function createFilesystem(root) {
     if (item.stat.isDirectory()) {
       throw new FsError("IS_DIRECTORY", "Cannot read a directory as a file", 409);
     }
+    if (!item.stat.isFile()) {
+      throw new FsError("UNSUPPORTED_FILE_TYPE", "Only regular text files are supported", 415);
+    }
     let buffer;
+    let itemStat;
     try {
-      buffer = await fs.readFile(item.resolved);
+      const handle = await fs.open(item.resolved, "r");
+      try {
+        itemStat = await handle.stat();
+        const maxRead = MAX_EDIT_BYTES + 1;
+        buffer = Buffer.alloc(maxRead);
+        let bytesRead = 0;
+        while (bytesRead < maxRead) {
+          const result = await handle.read(buffer, bytesRead, maxRead - bytesRead, bytesRead);
+          if (result.bytesRead === 0) {
+            break;
+          }
+          bytesRead += result.bytesRead;
+        }
+        buffer = buffer.subarray(0, bytesRead);
+      } finally {
+        await handle.close();
+      }
     } catch (error) {
       throw mapFsError(error);
+    }
+    const oversized = itemStat.size > MAX_EDIT_BYTES || buffer.length > MAX_EDIT_BYTES;
+    if (oversized && !preview) {
+      throw new FsError("FILE_TOO_LARGE", "File exceeds the editor limit", 413);
+    }
+    let contentBuffer = oversized ? buffer.subarray(0, MAX_EDIT_BYTES) : buffer;
+    let text = contentBuffer.toString("utf8");
+    if (Buffer.byteLength(text) !== contentBuffer.length && oversized && preview) {
+      for (let trimmed = 1; trimmed <= 3; trimmed += 1) {
+        contentBuffer = contentBuffer.subarray(0, -1);
+        text = contentBuffer.toString("utf8");
+        if (Buffer.byteLength(text) === contentBuffer.length) {
+          break;
+        }
+      }
     }
     const type = classify(buffer, input);
     if (type.binary) {
       throw new FsError("BINARY_FILE", "Binary files are not supported", 415);
     }
-    const text = buffer.toString("utf8");
-    if (Buffer.byteLength(text) !== buffer.length) {
+    if (Buffer.byteLength(text) !== contentBuffer.length) {
       throw new FsError("INVALID_ENCODING", "File is not valid UTF-8", 415);
     }
     const lines = text.length ? text.split(/\r\n|\r|\n/).length : 0;
-    const limited = buffer.length > MAX_EDIT_BYTES || lines > MAX_EDIT_LINES;
+    const limited = oversized || lines > MAX_EDIT_LINES;
     if (limited && !preview) {
       throw new FsError("FILE_TOO_LARGE", "File exceeds the editor limit", 413);
     }
     return {
       path: item.relative,
       content: limited ? text.slice(0, MAX_EDIT_BYTES) : text,
-      size: item.stat.size,
-      modified: item.stat.mtime.toISOString(),
-      mode: item.stat.mode & 0o777,
+      size: itemStat.size,
+      modified: itemStat.mtime.toISOString(),
+      mode: itemStat.mode & 0o777,
       language: type.language,
       lineEnding: text.includes("\r\n") ? "CRLF" : "LF",
       editable: !limited,
-      version: version(buffer, item.stat),
+      version: oversized ? null : version(buffer, itemStat),
     };
   }
 
