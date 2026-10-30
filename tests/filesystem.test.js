@@ -77,3 +77,66 @@ test("large previews stay bounded and safely truncate UTF-8", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("writes editor changes to sibling saved files and finds saved files", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "navi-saved-"));
+  try {
+    await writeFile(path.join(root, "main.js"), "original\n");
+    const filesystem = createFilesystem(root);
+    const saved = await filesystem.writeSaved("main.js", "edited\n");
+    assert.equal(saved.path, "main.js.saved");
+    assert.equal(saved.content, "edited\n");
+    assert.equal((await filesystem.read("main.js")).content, "original\n");
+    assert.deepEqual(await filesystem.findSaved(), ["main.js.saved"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("replaces an original with its contained regular saved copy atomically", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "navi-replace-saved-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "navi-replace-out-"));
+  try {
+    await writeFile(path.join(root, "main.js"), "original\n");
+    const filesystem = createFilesystem(root);
+    await filesystem.writeSaved("main.js", "replacement\n");
+    const result = await filesystem.replaceSaved("main.js");
+    assert.equal(result.content, "replacement\n");
+    assert.equal((await filesystem.read("main.js")).content, "replacement\n");
+    await assert.rejects(
+      () => filesystem.read("main.js.saved"),
+      (error) => error.code === "NOT_FOUND",
+    );
+    await assert.rejects(
+      () => filesystem.replaceSaved("missing.js"),
+      (error) => error.code === "NOT_FOUND",
+    );
+
+    await writeFile(path.join(root, "binary.js"), "preserve me");
+    await writeFile(path.join(root, "binary.js.saved"), Buffer.from([0, 1, 2]));
+    await assert.rejects(
+      () => filesystem.replaceSaved("binary.js"),
+      (error) => error.code === "BINARY_FILE",
+    );
+    assert.equal((await filesystem.read("binary.js")).content, "preserve me");
+
+    await writeFile(path.join(outside, "escape.js.saved"), "outside");
+    await symlink(path.join(outside, "escape.js.saved"), path.join(root, "escape.js.saved"));
+    await writeFile(path.join(root, "escape.js"), "safe");
+    await assert.rejects(
+      () => filesystem.replaceSaved("escape.js"),
+      (error) => error.code === "PATH_ESCAPE",
+    );
+    assert.equal((await filesystem.read("escape.js")).content, "safe");
+
+    await filesystem.create("folder", "directory");
+    await writeFile(path.join(root, "folder.saved"), "not a directory replacement");
+    await assert.rejects(
+      () => filesystem.replaceSaved("folder"),
+      (error) => error.code === "UNSUPPORTED_FILE_TYPE",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});

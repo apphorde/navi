@@ -244,6 +244,90 @@ export function createFilesystem(root) {
     return read(input);
   }
 
+  async function writeSaved(input, content) {
+    if (typeof content !== "string") {
+      throw new FsError("INVALID_CONTENT", "Content must be text", 422);
+    }
+    if (Buffer.byteLength(content) > MAX_EDIT_BYTES || content.split(/\r\n|\r|\n/).length > MAX_EDIT_LINES) {
+      throw new FsError("FILE_TOO_LARGE", "File exceeds the editor limit", 413);
+    }
+    const source = await stat(input);
+    if (!source.stat.isFile()) {
+      throw new FsError("UNSUPPORTED_FILE_TYPE", "Only regular text files are supported", 415);
+    }
+    const savedPath = `${source.relative}.saved`;
+    const target = safePath(savedPath);
+    await ensureContained(path.dirname(target.resolved));
+    const temp = `${target.resolved}.navi-${process.pid}-${Date.now()}.tmp`;
+    try {
+      await fs.writeFile(temp, content, { mode: source.stat.mode & 0o777 });
+      await fs.rename(temp, target.resolved);
+    } catch (error) {
+      try {
+        await fs.unlink(temp);
+      } catch {
+        /* The temp file may already be gone. */
+      }
+      throw mapFsError(error);
+    }
+    return read(savedPath);
+  }
+
+  async function findSaved(input = ".") {
+    const { resolved } = safePath(input, true);
+    await ensureContained(resolved);
+    let entries;
+    try {
+      entries = await fs.readdir(resolved, { withFileTypes: true });
+    } catch (error) {
+      throw mapFsError(error);
+    }
+    const found = [];
+    for (const entry of entries) {
+      const child = path.posix.join(input === "." ? "" : input, entry.name) || entry.name;
+      if (entry.isDirectory()) {
+        found.push(...(await findSaved(child)));
+      } else if (entry.isFile() && entry.name.endsWith(".saved")) {
+        found.push(child);
+      }
+    }
+    return found;
+  }
+
+  async function replaceSaved(input) {
+    const source = await stat(input);
+    let sourceInfo;
+    try {
+      sourceInfo = await fs.lstat(source.resolved);
+    } catch (error) {
+      throw mapFsError(error);
+    }
+    if (!sourceInfo.isFile()) {
+      throw new FsError("UNSUPPORTED_FILE_TYPE", "Only regular text files are supported", 415);
+    }
+    const savedPath = `${source.relative}.saved`;
+    const candidate = safePath(savedPath);
+    await ensureContained(candidate.resolved);
+    let candidateInfo;
+    try {
+      candidateInfo = await fs.lstat(candidate.resolved);
+    } catch (error) {
+      throw mapFsError(error);
+    }
+    if (!candidateInfo.isFile()) {
+      throw new FsError("UNSUPPORTED_FILE_TYPE", "Saved copy must be a regular file", 415);
+    }
+    // Validate the complete replacement before overwriting the original. A .saved file
+    // may have been created or changed outside the editor and must not destroy a good source.
+    await read(savedPath);
+    try {
+      await fs.rename(candidate.resolved, source.resolved);
+    } catch (error) {
+      throw mapFsError(error);
+    }
+    return read(source.relative);
+  }
+
   async function create(input, kind = "file") {
     const { resolved } = safePath(input);
     await ensureContained(path.dirname(resolved));
@@ -282,5 +366,18 @@ export function createFilesystem(root) {
     return stat(destination);
   }
 
-  return { root: absoluteRoot, safePath, list, stat, read, write, create, rename, classify };
+  return {
+    root: absoluteRoot,
+    safePath,
+    list,
+    stat,
+    read,
+    write,
+    writeSaved,
+    replaceSaved,
+    findSaved,
+    create,
+    rename,
+    classify,
+  };
 }

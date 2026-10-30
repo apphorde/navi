@@ -5,6 +5,9 @@ import { sanitizeWorkspacePath } from "./workspace-path.js";
 export default function () {
   const items = ref([]);
   const selected = ref(null);
+  const tabs = ref([]);
+  const unsaved = ref([]);
+  const savedCopies = ref([]);
   const mode = ref("editor");
   const navOpen = ref(false);
   const navPinned = ref(true);
@@ -110,6 +113,18 @@ export default function () {
         latestContent.set(item.path, file.content);
       }
       selected.value = file;
+      if (!tabs.value.some((tab) => tab.path === file.path)) {
+        tabs.value = [...tabs.value, { path: file.path, name: file.path.split("/").pop() }];
+      }
+      try {
+        const recent = JSON.parse(localStorage.getItem("navi.recent") || "[]").filter((value) => value !== file.path);
+        localStorage.setItem("navi.recent", JSON.stringify([file.path, ...recent].slice(0, 12)));
+      } catch {
+        // Browser storage may be unavailable; opening files should still work.
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set("p", file.path);
+      history.replaceState(null, "", url);
       clearTimeout(navCloseTimer);
       navOpen.value = false;
       saveStatus.value = dirtyPaths.has(item.path) ? "Unsaved" : "Saved";
@@ -168,28 +183,32 @@ export default function () {
             saveStatus.value = "Saving…";
           }
           try {
-            const current = selected.value?.path === path ? selected.value : null;
-            const result = await request("/api/file", {
+            const result = await request("/api/saved", {
               method: "PUT",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 path,
                 content,
-                version: expectedVersions.get(path) ?? current?.version ?? file.version,
               }),
             });
             const currentContent = latestContent.get(path);
             if (currentContent === content) {
+              if (!savedCopies.value.includes(path)) {
+                savedCopies.value = [...savedCopies.value, path];
+              }
+              if (!unsaved.value.includes(`${path}.saved`)) {
+                unsaved.value = [...unsaved.value, `${path}.saved`];
+              }
               dirtyPaths.delete(path);
               expectedVersions.delete(path);
               latestContent.set(path, result.content);
               if (selected.value?.path === path) {
-                selected.value = result;
+                selected.value = { ...selected.value, content: result.content, modified: result.modified };
               }
             } else {
-              expectedVersions.set(path, result.version);
+              expectedVersions.delete(path);
               if (selected.value?.path === path) {
-                selected.value = { ...selected.value, ...result, content: currentContent };
+                selected.value = { ...selected.value, content: currentContent };
               }
             }
             if (selected.value?.path === path && saveSequences.get(path) === sequence) {
@@ -237,14 +256,25 @@ export default function () {
     try {
       user.value = await request("/api/profile");
       aiEnabled.value = (await request("/api/ai/config")).enabled;
+      unsaved.value = (await request("/api/find?path=.")).paths;
+      savedCopies.value = unsaved.value.filter((path) => path.endsWith(".saved")).map((path) => path.slice(0, -6));
       await loadTree();
-      const requestedPath = new URL(window.location.href).searchParams.get("p");
-      const path = sanitizeWorkspacePath(requestedPath);
-      if (requestedPath && !path) {
+      const urlPath = new URL(window.location.href).searchParams.get("p");
+      let recent = [];
+      try {
+        recent = JSON.parse(localStorage.getItem("navi.recent") || "[]");
+      } catch {
+        recent = [];
+      }
+      const paths = [...new Set([urlPath, ...(Array.isArray(recent) ? recent : [])].filter(Boolean))].slice(0, 12);
+      const invalidPath = paths.find((candidate) => !sanitizeWorkspacePath(candidate));
+      if (invalidPath) {
         saveStatus.value = "Invalid file path in URL";
-      } else if (path) {
+      } else if (paths.length) {
         mode.value = "editor";
-        await select({ path, type: "file" });
+        for (const filePath of paths.reverse()) {
+          await select({ path: filePath, type: "file" });
+        }
       }
     } catch (error) {
       saveStatus.value = error.message;
@@ -283,6 +313,9 @@ export default function () {
   return {
     items,
     selected,
+    tabs,
+    unsaved,
+    savedCopies,
     mode,
     navOpen,
     navPinned,
@@ -294,7 +327,30 @@ export default function () {
     prompt,
     loadTree,
     select,
+    activateTab: (path) => select({ path, type: "file" }),
     save,
+    replaceSaved: async () => {
+      const file = selected.value;
+      if (!file || !savedCopies.value.includes(file.path)) {
+        return;
+      }
+      try {
+        const result = await request("/api/saved/replace", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: file.path }),
+        });
+        selected.value = result;
+        savedCopies.value = savedCopies.value.filter((path) => path !== file.path);
+        unsaved.value = unsaved.value.filter((path) => path !== `${file.path}.saved`);
+        dirtyPaths.delete(file.path);
+        latestContent.set(file.path, result.content);
+        await loadTree();
+        saveStatus.value = "Saved";
+      } catch (error) {
+        saveStatus.value = error.message;
+      }
+    },
     showPrompt,
     savePrompt,
     setMode: (value) => (mode.value = value),

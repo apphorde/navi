@@ -111,6 +111,10 @@ async function api(request, response, pathname) {
         entries: await filesystem.list(new URL(request.url, "http://navi").searchParams.get("path") || "."),
       });
     }
+    if (request.method === "GET" && pathname === "/api/find") {
+      const query = new URL(request.url, "http://navi").searchParams;
+      return send(response, 200, { paths: await filesystem.findSaved(query.get("path") || ".") });
+    }
     if (request.method === "GET" && pathname === "/api/file") {
       return send(
         response,
@@ -124,6 +128,18 @@ async function api(request, response, pathname) {
       const input = await readJsonBody(request);
       const result = await filesystem.write(input.path, input.content, input.version);
       database.audit(user, "write", input.path, "success");
+      return send(response, 200, result);
+    }
+    if (request.method === "PUT" && pathname === "/api/saved") {
+      const input = await readJsonBody(request);
+      const result = await filesystem.writeSaved(input.path, input.content);
+      database.audit(user, "save_copy", input.path, "success");
+      return send(response, 200, result);
+    }
+    if (request.method === "POST" && pathname === "/api/saved/replace") {
+      const input = await readJsonBody(request);
+      const result = await filesystem.replaceSaved(input.path);
+      database.audit(user, "replace_saved", input.path, "success");
       return send(response, 200, result);
     }
     if (request.method === "POST" && pathname === "/api/file") {
